@@ -15,6 +15,10 @@ public class DecisionDTO {
 
     private String aiReview;
 
+    // Votes finaux individuels déjà soumis
+    private boolean managerVoted;
+    private boolean adminVoted;
+
     // Résumé des avis pour affichage
     private List<DecisionInputDTO> inputs;
     private String blockingReason;
@@ -42,6 +46,12 @@ public class DecisionDTO {
 
     public List<DecisionInputDTO> getInputs() { return inputs; }
     public void setInputs(List<DecisionInputDTO> inputs) { this.inputs = inputs; }
+
+    public boolean isManagerVoted() { return managerVoted; }
+    public void setManagerVoted(boolean managerVoted) { this.managerVoted = managerVoted; }
+
+    public boolean isAdminVoted() { return adminVoted; }
+    public void setAdminVoted(boolean adminVoted) { this.adminVoted = adminVoted; }
 
     public String getBlockingReason() { return blockingReason; }
     public void setBlockingReason(String blockingReason) { this.blockingReason = blockingReason; }

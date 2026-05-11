@@ -8,6 +8,8 @@ public class DecisionInputDTO {
     private UUID id;
     private UUID applicationId;
     private UUID authorId;
+    private String authorName;
+    private boolean own;
     private String sentiment;
     private String comment;
     private Integer confidence;
@@ -21,6 +23,12 @@ public class DecisionInputDTO {
 
     public UUID getAuthorId() { return authorId; }
     public void setAuthorId(UUID authorId) { this.authorId = authorId; }
+
+    public String getAuthorName() { return authorName; }
+    public void setAuthorName(String authorName) { this.authorName = authorName; }
+
+    public boolean isOwn() { return own; }
+    public void setOwn(boolean own) { this.own = own; }
 
     public String getSentiment() { return sentiment; }
     public void setSentiment(String sentiment) { this.sentiment = sentiment; }

@@ -52,6 +52,10 @@ public class ChatAnswerAnalysisDTO {
     private List<String> inconsistencies;
     private List<String> followUpQuestions;
     private String recommendedAction; // PRIORITY, REVIEW, REJECT
+    private String experienceLevel;  // JUNIOR, INTERMEDIATE, SENIOR
+    private String jobMatchLevel;    // HIGH, MEDIUM, LOW, UNKNOWN
+    private List<String> matchedJobTechnologies;
+    private List<String> missingJobTechnologies;
     
     // Constructeurs
     public ChatAnswerAnalysisDTO() {
@@ -327,4 +331,56 @@ public class ChatAnswerAnalysisDTO {
     public void setRecommendedAction(String recommendedAction) {
         this.recommendedAction = recommendedAction;
     }
+
+    public String getExperienceLevel() {
+        return experienceLevel;
+    }
+
+    public void setExperienceLevel(String experienceLevel) {
+        this.experienceLevel = experienceLevel;
+    }
+
+    public String getJobMatchLevel() { return jobMatchLevel; }
+    public void setJobMatchLevel(String jobMatchLevel) { this.jobMatchLevel = jobMatchLevel; }
+
+    public List<String> getMatchedJobTechnologies() { return matchedJobTechnologies; }
+    public void setMatchedJobTechnologies(List<String> matchedJobTechnologies) { this.matchedJobTechnologies = matchedJobTechnologies; }
+
+    public List<String> getMissingJobTechnologies() { return missingJobTechnologies; }
+    public void setMissingJobTechnologies(List<String> missingJobTechnologies) { this.missingJobTechnologies = missingJobTechnologies; }
+
+    // --- Raisonnements explicites (générés par le LLM) ---
+
+    private String motivationReasoning;
+    private String technicalReasoning;
+    private String experienceReasoning;
+    private String jobMatchReasoning;
+    private String availabilityReasoning;
+    private String locationReasoning;
+    private String overallAssessment;
+    private String recommendationReasoning;
+
+    public String getMotivationReasoning() { return motivationReasoning; }
+    public void setMotivationReasoning(String motivationReasoning) { this.motivationReasoning = motivationReasoning; }
+
+    public String getTechnicalReasoning() { return technicalReasoning; }
+    public void setTechnicalReasoning(String technicalReasoning) { this.technicalReasoning = technicalReasoning; }
+
+    public String getExperienceReasoning() { return experienceReasoning; }
+    public void setExperienceReasoning(String experienceReasoning) { this.experienceReasoning = experienceReasoning; }
+
+    public String getJobMatchReasoning() { return jobMatchReasoning; }
+    public void setJobMatchReasoning(String jobMatchReasoning) { this.jobMatchReasoning = jobMatchReasoning; }
+
+    public String getAvailabilityReasoning() { return availabilityReasoning; }
+    public void setAvailabilityReasoning(String availabilityReasoning) { this.availabilityReasoning = availabilityReasoning; }
+
+    public String getLocationReasoning() { return locationReasoning; }
+    public void setLocationReasoning(String locationReasoning) { this.locationReasoning = locationReasoning; }
+
+    public String getOverallAssessment() { return overallAssessment; }
+    public void setOverallAssessment(String overallAssessment) { this.overallAssessment = overallAssessment; }
+
+    public String getRecommendationReasoning() { return recommendationReasoning; }
+    public void setRecommendationReasoning(String recommendationReasoning) { this.recommendationReasoning = recommendationReasoning; }
 }

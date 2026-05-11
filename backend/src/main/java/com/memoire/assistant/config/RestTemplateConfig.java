@@ -19,8 +19,8 @@ public class RestTemplateConfig {
     public RestTemplate restTemplate() {
         org.springframework.http.client.SimpleClientHttpRequestFactory factory =
             new org.springframework.http.client.SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(3000);  // 3s connexion
-        factory.setReadTimeout(5000);     // 5s lecture
+        factory.setConnectTimeout(5000);   // 5s connexion
+        factory.setReadTimeout(60000);    // 60s lecture — nécessaire pour les appels LLM
 
         RestTemplate restTemplate = new RestTemplate(factory);
         

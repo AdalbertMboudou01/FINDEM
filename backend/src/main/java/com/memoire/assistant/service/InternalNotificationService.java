@@ -55,9 +55,7 @@ public class InternalNotificationService {
     }
 
     public List<Map<String, Object>> getMyNotifications() {
-        UUID userId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID userId = TenantContext.getActorId();
         UUID companyId = TenantContext.getCompanyId();
 
         return repository
@@ -79,9 +77,7 @@ public class InternalNotificationService {
     }
 
     public long getUnreadCount() {
-        UUID userId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID userId = TenantContext.getActorId();
         UUID companyId = TenantContext.getCompanyId();
         return repository.countByUserIdAndCompanyIdAndReadAtIsNull(userId, companyId);
     }
@@ -94,9 +90,7 @@ public class InternalNotificationService {
     }
 
     public void markAllAsRead() {
-        UUID userId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID userId = TenantContext.getActorId();
         UUID companyId = TenantContext.getCompanyId();
         repository.findByUserIdAndCompanyIdOrderByCreatedAtDesc(userId, companyId)
                 .stream()

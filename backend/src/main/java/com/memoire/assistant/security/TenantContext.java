@@ -48,6 +48,12 @@ public final class TenantContext {
         return "ADMIN".equalsIgnoreCase(roleHolder.get());
     }
 
+    /** Identifiant canonique de l'acteur courant : recruiterId en priorité, sinon userId. */
+    public static UUID getActorId() {
+        UUID rid = recruiterIdHolder.get();
+        return rid != null ? rid : userIdHolder.get();
+    }
+
     public static void clear() {
         userIdHolder.remove();
         recruiterIdHolder.remove();

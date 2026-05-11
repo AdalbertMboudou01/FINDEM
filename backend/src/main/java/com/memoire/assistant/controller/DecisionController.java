@@ -18,13 +18,11 @@ public class DecisionController {
     @Autowired
     private DecisionService decisionService;
 
-    /** Lister les avis sur une candidature */
     @GetMapping("/decision-inputs")
     public ResponseEntity<List<DecisionInputDTO>> getInputs(@PathVariable UUID applicationId) {
         return ResponseEntity.ok(decisionService.getInputs(applicationId));
     }
 
-    /** Ajouter un avis individuel */
     @PostMapping("/decision-inputs")
     public ResponseEntity<DecisionInputDTO> addInput(
             @PathVariable UUID applicationId,
@@ -36,19 +34,34 @@ public class DecisionController {
         return ResponseEntity.ok(decisionService.addInput(applicationId, sentiment, comment, confidence));
     }
 
-    /** Lire l'état décision (avis + décision finale si présente) */
+    @PatchMapping("/decision-inputs/{inputId}")
+    public ResponseEntity<DecisionInputDTO> updateInput(
+            @PathVariable UUID applicationId,
+            @PathVariable UUID inputId,
+            @RequestBody Map<String, Object> body) {
+        String sentiment = (String) body.get("sentiment");
+        String comment = (String) body.get("comment");
+        Integer confidence = body.get("confidence") != null
+                ? ((Number) body.get("confidence")).intValue() : null;
+        return ResponseEntity.ok(decisionService.updateInput(applicationId, inputId, sentiment, comment, confidence));
+    }
+
     @GetMapping("/decision")
     public ResponseEntity<DecisionDTO> getDecision(@PathVariable UUID applicationId) {
         return ResponseEntity.ok(decisionService.getDecision(applicationId));
     }
 
-    /** Enregistrer la décision finale */
+    /** Décision finale — réservée au MANAGER */
     @PostMapping("/decision")
-    public ResponseEntity<DecisionDTO> recordDecision(
+    public ResponseEntity<?> recordDecision(
             @PathVariable UUID applicationId,
             @RequestBody Map<String, String> body) {
-        String finalStatus = body.get("finalStatus");
-        String rationale = body.get("rationale");
-        return ResponseEntity.ok(decisionService.recordFinalDecision(applicationId, finalStatus, rationale));
+        try {
+            String finalStatus = body.get("finalStatus");
+            String rationale = body.get("rationale");
+            return ResponseEntity.ok(decisionService.recordFinalDecision(applicationId, finalStatus, rationale));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 }

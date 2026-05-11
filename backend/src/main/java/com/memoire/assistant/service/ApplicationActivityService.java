@@ -32,9 +32,7 @@ public class ApplicationActivityService {
                 .orElseThrow(() -> new IllegalArgumentException("Candidature introuvable: " + applicationId));
 
         UUID companyId = TenantContext.getCompanyId();
-        UUID actorId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID actorId = TenantContext.getActorId();
         ActorType actorType = TenantContext.getRecruiterId() != null ? ActorType.RECRUITER : ActorType.USER;
 
         return save(application, companyId, actorId, actorType, eventType, payload, "ALL");
@@ -58,9 +56,7 @@ public class ApplicationActivityService {
                 .orElseThrow(() -> new IllegalArgumentException("Candidature introuvable: " + applicationId));
 
         UUID companyId = TenantContext.getCompanyId();
-        UUID actorId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID actorId = TenantContext.getActorId();
         ActorType actorType = TenantContext.getRecruiterId() != null ? ActorType.RECRUITER : ActorType.USER;
 
         return save(application, companyId, actorId, actorType, eventType, payload, "INTERNAL");

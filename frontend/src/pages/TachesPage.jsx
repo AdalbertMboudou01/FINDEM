@@ -24,7 +24,7 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 }
 
-const EMPTY_FORM = { applicationId: '', title: '', description: '', priority: 'MEDIUM', dueDate: '' };
+const EMPTY_FORM = { applicationId: '', title: '', description: '', priority: 'MEDIUM', dueDate: '', assigneeId: '' };
 
 export default function TachesPage() {
   const { session } = useAuth();
@@ -32,6 +32,7 @@ export default function TachesPage() {
 
   const [tasks,      setTasks]      = useState([]);
   const [apps,       setApps]       = useState([]);
+  const [recruiters, setRecruiters] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [filter,     setFilter]     = useState('all');
   const [showDrawer, setShowDrawer] = useState(false);
@@ -43,12 +44,14 @@ export default function TachesPage() {
 
   async function load() {
     setLoading(true);
-    const [tasksRes, appsRes] = await Promise.all([
+    const [tasksRes, appsRes, recruitersRes] = await Promise.all([
       api.get('/api/tasks/mine', token).catch(() => []),
       api.get('/api/applications', token).catch(() => []),
+      api.get('/api/recruiters', token).catch(() => []),
     ]);
-    setTasks(Array.isArray(tasksRes) ? tasksRes : []);
-    setApps(Array.isArray(appsRes)   ? appsRes  : []);
+    setTasks(Array.isArray(tasksRes)     ? tasksRes     : []);
+    setApps(Array.isArray(appsRes)       ? appsRes      : []);
+    setRecruiters(Array.isArray(recruitersRes) ? recruitersRes : []);
     setLoading(false);
   }
 
@@ -63,14 +66,14 @@ export default function TachesPage() {
 
   async function handleCreate(e) {
     e.preventDefault();
-    if (!form.applicationId || !form.title) {
-      setFormError('Candidature et titre sont obligatoires.'); return;
+    if (!form.applicationId || !form.title || !form.assigneeId) {
+      setFormError('Candidature, titre et assigné sont obligatoires.'); return;
     }
     setSaving(true); setFormError('');
     try {
       const created = await api.post(
         `/api/applications/${form.applicationId}/tasks`,
-        { title: form.title, description: form.description || null, priority: form.priority, dueDate: form.dueDate || null },
+        { title: form.title, description: form.description || null, priority: form.priority, dueDate: form.dueDate || null, assigneeId: form.assigneeId },
         token
       );
       setTasks(p => [created, ...p]);
@@ -136,6 +139,7 @@ export default function TachesPage() {
                       key={task.id}
                       task={task}
                       apps={apps}
+                      recruiters={recruiters}
                       onForward={STATUS_FORWARD[task.status] ? () => moveStatus(task, STATUS_FORWARD[task.status]) : null}
                       onBack={STATUS_BACK[task.status]        ? () => moveStatus(task, STATUS_BACK[task.status])    : null}
                       onDelete={() => handleDelete(task)}
@@ -181,6 +185,18 @@ export default function TachesPage() {
                 <textarea value={form.description} onChange={set('description')} placeholder="Détails…" rows={3} />
               </div>
 
+              <div className="form-field">
+                <label>Assigné à *</label>
+                <select value={form.assigneeId} onChange={set('assigneeId')} required>
+                  <option value="">— Sélectionner un membre —</option>
+                  {recruiters.map(r => (
+                    <option key={r.recruiterId} value={r.recruiterId}>
+                      {r.name ?? r.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="form-row-2">
                 <div className="form-field">
                   <label>Priorité</label>
@@ -213,10 +229,12 @@ export default function TachesPage() {
   );
 }
 
-function TaskCard({ task, apps, onForward, onBack, onDelete }) {
-  const p    = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.MEDIUM;
-  const app  = apps.find(a => String(a.applicationId) === String(task.applicationId));
-  const name = app ? `${app.candidate?.firstName ?? ''} ${app.candidate?.lastName ?? ''}`.trim() : null;
+function TaskCard({ task, apps, recruiters, onForward, onBack, onDelete }) {
+  const p        = PRIORITY_STYLE[task.priority] ?? PRIORITY_STYLE.MEDIUM;
+  const app      = apps.find(a => String(a.applicationId) === String(task.applicationId));
+  const name     = app ? `${app.candidate?.firstName ?? ''} ${app.candidate?.lastName ?? ''}`.trim() : null;
+  const assignee = recruiters?.find(r => String(r.recruiterId) === String(task.assigneeId));
+  const assigneeName = assignee ? (assignee.name ?? assignee.email) : null;
 
   return (
     <div className={`task-card${task.overdue ? ' overdue' : ''}`}>
@@ -247,6 +265,11 @@ function TaskCard({ task, apps, onForward, onBack, onDelete }) {
           </span>
         )}
         {name && <span className="task-candidate">{name}</span>}
+        {assigneeName && (
+          <span className="task-assignee" title={`Assigné à ${assigneeName}`}>
+            {assigneeName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+          </span>
+        )}
       </div>
 
       <div className="task-card-actions">

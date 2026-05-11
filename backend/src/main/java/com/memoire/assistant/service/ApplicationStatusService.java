@@ -31,6 +31,9 @@ public class ApplicationStatusService {
         ALLOWED_TRANSITIONS.put("embauche",              List.of());
         ALLOWED_TRANSITIONS.put("non_retenu",            List.of("vivier", "en_etude"));
         ALLOWED_TRANSITIONS.put("vivier",                List.of("en_etude"));
+        // Vote collectif
+        ALLOWED_TRANSITIONS.put("en_deliberation",       List.of("second_vote", "retenu", "non_retenu"));
+        ALLOWED_TRANSITIONS.put("second_vote",           List.of("retenu", "non_retenu"));
         // Legacy statuses
         ALLOWED_TRANSITIONS.put("en_attente",            List.of("en_etude", "non_retenu", "vivier"));
         ALLOWED_TRANSITIONS.put("a_revoir_manuellement", List.of("entretien", "non_retenu", "vivier"));

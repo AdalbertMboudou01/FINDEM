@@ -65,6 +65,23 @@ public class ChatAnswerService {
     /**
      * Analyse complète des réponses du chatbot pour une candidature
      */
+    public void invalidateSemanticCache(UUID applicationId) {
+        applicationRepository.findById(applicationId).ifPresent(app -> {
+            app.setSemanticCache(null);
+            app.setSemanticCacheAt(null);
+            applicationRepository.save(app);
+        });
+    }
+
+    public void invalidateSemanticCacheForJob(UUID jobId) {
+        applicationRepository.findByJob_JobId(jobId).forEach(app -> {
+            app.setSemanticCache(null);
+            app.setSemanticCacheAt(null);
+        });
+        applicationRepository.findByJob_JobId(jobId)
+                .forEach(app -> applicationRepository.save(app));
+    }
+
     public ChatAnswerAnalysisDTO analyzeChatAnswers(UUID applicationId) {
         Application application = applicationRepository.findById(applicationId)
             .orElseThrow(() -> new RuntimeException("Candidature non trouvée"));
@@ -138,20 +155,54 @@ public class ChatAnswerService {
     }
 
     private ChatAnswerAnalysisDTO analyzeApplicationWithAnswers(Application application, List<ChatAnswer> answers, boolean includeLlm) {
-        ChatAnswerAnalysisDTO analysis = new ChatAnswerAnalysisDTO(application.getApplicationId().toString());
+        // Tentative LLM — lecture et compréhension comme un recruteur humain
+        if (includeLlm) {
+            Optional<ChatAnswerAnalysisDTO> llmResult =
+                    semanticExtractionService.analyzeApplication(answers, application.getJob(), application);
+            if (llmResult.isPresent()) {
+                ChatAnswerAnalysisDTO dto = llmResult.get();
+                dto.setApplicationId(application.getApplicationId().toString());
+                dto.setAnalysisSchemaVersion("v3-llm-primary");
+                dto.setSemanticFallbackUsed(false);
+                enrichWithHeuristicFlags(answers, dto);
+                return dto;
+            }
+            log.warn("LLM analysis unavailable for application={}; switching to heuristic fallback",
+                    application.getApplicationId());
+        }
 
+        // Fallback heuristique — uniquement si le LLM est indisponible
+        ChatAnswerAnalysisDTO analysis = new ChatAnswerAnalysisDTO(application.getApplicationId().toString());
         analyzeMotivation(answers, analysis);
         analyzeTechnicalProfile(answers, analysis);
+        analyzeExperienceLevel(answers, analysis);
+        analyzeJobMatch(answers, analysis, application.getJob());
         analyzeAvailability(answers, analysis);
         analyzeLocation(answers, analysis, application);
-        if (includeLlm) {
-            extractConstrainedSemanticFacts(answers, analysis);
-        }
         calculateCompletenessScore(answers, analysis);
         detectInconsistencies(answers, analysis);
         buildQualitativeSummary(analysis);
-
+        analysis.setAnalysisSchemaVersion("v3-heuristic-fallback");
+        analysis.setSemanticFallbackUsed(true);
         return analysis;
+    }
+
+    /**
+     * Enrichit le résultat LLM avec les flags booléens que le LLM ne retourne pas explicitement.
+     */
+    private void enrichWithHeuristicFlags(List<ChatAnswer> answers, ChatAnswerAnalysisDTO dto) {
+        // Détection GitHub / portfolio
+        boolean hasGitHub = answers.stream().anyMatch(a -> {
+            String t = a.getAnswerText() == null ? "" : a.getAnswerText().toLowerCase();
+            return t.contains("github.com") || t.contains("gitlab.com")
+                    || t.contains("bitbucket.org") || t.contains("portfolio");
+        });
+        dto.setHasGitHubOrPortfolio(hasGitHub);
+        if (hasGitHub) {
+            dto.setGithubAssessment("Le candidat fournit un lien externe (GitHub ou portfolio) dans ses réponses.");
+        } else {
+            dto.setGithubAssessment("Aucun lien GitHub ou portfolio identifié dans les réponses.");
+        }
     }
     
     /**
@@ -213,7 +264,9 @@ public class ChatAnswerService {
         analysis.setMotivationKeywords(detectedMarkers.stream().distinct().collect(Collectors.toList()));
     }
 
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     /**
      * Analyse du profil technique et des projets
@@ -271,6 +324,59 @@ public class ChatAnswerService {
         analysis.setHasGitHubOrPortfolio(hasGitHubOrPortfolio);
     }
     
+    private void analyzeExperienceLevel(List<ChatAnswer> answers, ChatAnswerAnalysisDTO analysis) {
+        String combined = answers.stream()
+                .map(a -> a.getAnswerText() == null ? "" : a.getAnswerText())
+                .collect(Collectors.joining(" "))
+                .toLowerCase();
+
+        int score = 0;
+        if (containsAny(combined, List.of("senior", "lead", "architecte", "10 ans", "8 ans", "7 ans"))) score += 3;
+        if (containsAny(combined, List.of("5 ans", "6 ans", "4 ans", "confirmé", "expérimenté"))) score += 2;
+        if (containsAny(combined, List.of("production", "déploiement", "client", "équipe", "encadrement"))) score += 2;
+        if (containsAny(combined, List.of("stage", "alternance", "apprentissage", "junior", "débutant"))) score -= 2;
+        if (containsAny(combined, List.of("projet personnel", "side project", "école", "formation"))) score += 0;
+        if (analysis.isHasProjectDetails()) score += 1;
+        if (analysis.isHasGitHubOrPortfolio()) score += 1;
+
+        if (score >= 4) analysis.setExperienceLevel("SENIOR");
+        else if (score >= 2) analysis.setExperienceLevel("INTERMEDIATE");
+        else analysis.setExperienceLevel("JUNIOR");
+    }
+
+    private void analyzeJobMatch(List<ChatAnswer> answers, ChatAnswerAnalysisDTO analysis, Job job) {
+        List<String> required = job == null ? null : job.getTechnologies();
+        if (required == null || required.isEmpty()) {
+            analysis.setJobMatchLevel("UNKNOWN");
+            return;
+        }
+
+        String candidateText = answers.stream()
+                .map(a -> a.getAnswerText() == null ? "" : a.getAnswerText())
+                .collect(Collectors.joining(" "));
+        String normalized = normalizeForSearch(candidateText);
+
+        List<String> matched = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+
+        for (String tech : required) {
+            String t = normalizeForSearch(tech);
+            if (normalized.contains(t)) {
+                matched.add(tech);
+            } else {
+                missing.add(tech);
+            }
+        }
+
+        analysis.setMatchedJobTechnologies(matched);
+        analysis.setMissingJobTechnologies(missing);
+
+        double ratio = (double) matched.size() / required.size();
+        if (ratio >= 0.75) analysis.setJobMatchLevel("HIGH");
+        else if (ratio >= 0.40) analysis.setJobMatchLevel("MEDIUM");
+        else analysis.setJobMatchLevel("LOW");
+    }
+
     /**
      * Analyse de la disponibilité et du rythme d'alternance
      */
@@ -570,9 +676,14 @@ public class ChatAnswerService {
         boolean hasStrongConfidence = evidenceConfidence >= 0.70;
         boolean hasLowConfidence = evidenceConfidence > 0.0 && evidenceConfidence < 0.50;
 
+        boolean jobMatchKnown = !"UNKNOWN".equals(analysis.getJobMatchLevel());
+        boolean goodJobMatch  = "HIGH".equals(analysis.getJobMatchLevel()) || !jobMatchKnown;
+        boolean poorJobMatch  = "LOW".equals(analysis.getJobMatchLevel()) && jobMatchKnown;
+
         boolean strongReadiness = analysis.getCompletenessScore() >= 0.85
             && "HIGH".equals(analysis.getMotivationLevel())
             && "STRONG".equals(analysis.getTechnicalLevel())
+            && goodJobMatch
             && !"INCOMPATIBLE".equals(analysis.getLocationMatch())
             && (analysis.getPointsToConfirm() == null || analysis.getPointsToConfirm().size() <= 2)
             && (analysis.getInconsistencies() == null || analysis.getInconsistencies().isEmpty())
@@ -582,6 +693,7 @@ public class ChatAnswerService {
         boolean weakProfile = analysis.getCompletenessScore() < 0.45
             || "LOW".equals(analysis.getMotivationLevel())
             || "WEAK".equals(analysis.getTechnicalLevel())
+            || poorJobMatch
             || "INCOMPATIBLE".equals(analysis.getLocationMatch());
 
         if (strongReadiness) {
@@ -609,8 +721,8 @@ public class ChatAnswerService {
         return "La candidature est structurée en constats avec preuves textuelles et un niveau de confiance satisfaisant. Une validation humaine reste requise avant décision.";
     }
 
-    private void extractConstrainedSemanticFacts(List<ChatAnswer> answers, ChatAnswerAnalysisDTO analysis) {
-        List<AnalysisFactDTO> llmFacts = semanticExtractionService.extractFacts(answers);
+    private void extractConstrainedSemanticFacts(List<ChatAnswer> answers, ChatAnswerAnalysisDTO analysis, Job job) {
+        List<AnalysisFactDTO> llmFacts = semanticExtractionService.extractFacts(answers, job);
         if (llmFacts != null && !llmFacts.isEmpty()) {
             List<AnalysisFactDTO> sanitizedFacts = sanitizeFacts(llmFacts);
             List<String> missing = analysis.getMissingInformation() == null
@@ -743,12 +855,17 @@ public class ChatAnswerService {
         return value.substring(0, 220) + "...";
     }
 
+    private static final double MIN_FACT_CONFIDENCE   = 0.5;
+    private static final int    MIN_EVIDENCE_LENGTH    = 15;
+
     private Optional<AnalysisFactDTO> findFact(ChatAnswerAnalysisDTO analysis, String dimension) {
         if (analysis.getSemanticFacts() == null) {
             return Optional.empty();
         }
         return analysis.getSemanticFacts().stream()
             .filter(fact -> dimension.equals(fact.getDimension()))
+            .filter(fact -> fact.getConfidence() >= MIN_FACT_CONFIDENCE)
+            .filter(fact -> fact.getEvidence() != null && fact.getEvidence().trim().length() >= MIN_EVIDENCE_LENGTH)
             .findFirst();
     }
 

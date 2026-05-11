@@ -2,6 +2,7 @@ package com.memoire.assistant.controller;
 
 import com.memoire.assistant.model.Job;
 import com.memoire.assistant.service.JobService;
+import com.memoire.assistant.service.SemanticExtractionService;
 import com.memoire.assistant.dto.JobCreateRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +19,9 @@ import java.util.UUID;
 public class JobController {
     @Autowired
     private JobService jobService;
+
+    @Autowired
+    private SemanticExtractionService semanticExtractionService;
 
     @GetMapping
     public List<Job> getAllJobs() {
@@ -53,5 +58,27 @@ public class JobController {
         }
         jobService.deleteJob(id);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Génération assistée par IA d'une fiche de poste complète.
+     * Le recruteur fournit le titre et quelques infos de base ;
+     * l'IA retourne description, contexte, missions et technos suggérées.
+     */
+    @PostMapping("/ai-assist")
+    public ResponseEntity<?> aiAssist(@RequestBody Map<String, String> body) {
+        String title    = body.getOrDefault("title", "").trim();
+        String location = body.getOrDefault("location", "");
+        String rhythm   = body.getOrDefault("alternanceRhythm", "");
+        String context  = body.getOrDefault("context", "");
+
+        if (title.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Le titre est obligatoire."));
+        }
+
+        return semanticExtractionService.draftJobOffer(title, location, rhythm, context)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(503).body(
+                        Map.of("message", "Le service IA est temporairement indisponible. Complétez l'offre manuellement.")));
     }
 }

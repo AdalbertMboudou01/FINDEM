@@ -1,6 +1,8 @@
 package com.memoire.assistant.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -25,6 +27,7 @@ public class DecisionInput {
     private UUID authorId;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(nullable = false, columnDefinition = "sentiment_type")
     private Sentiment sentiment;
 

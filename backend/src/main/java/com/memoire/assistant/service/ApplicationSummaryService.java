@@ -190,8 +190,8 @@ public class ApplicationSummaryService {
         if (combined.contains("base de données") || combined.contains("api")) score += 1;
         if (combined.contains("framework") || combined.contains("librairie")) score += 1;
         
-        if (score >= 5) return "INTERMEDIATE";
-        if (score >= 2) return "JUNIOR";
+        if (score >= 7) return "SENIOR";
+        if (score >= 4) return "INTERMEDIATE";
         return "JUNIOR";
     }
     

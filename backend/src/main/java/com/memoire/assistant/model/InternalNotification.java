@@ -10,7 +10,8 @@ import java.util.UUID;
 public class InternalNotification {
 
     public enum Type {
-        MENTION, TASK_ASSIGNED, DECISION_NEEDED, STATUS_CHANGED, COMMENT_ADDED
+        MENTION, TASK_ASSIGNED, DECISION_NEEDED, STATUS_CHANGED, COMMENT_ADDED,
+        OPINION_SUBMITTED, FINAL_DECISION_RECORDED
     }
 
     @Id

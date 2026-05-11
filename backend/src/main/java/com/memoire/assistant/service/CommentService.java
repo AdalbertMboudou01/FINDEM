@@ -53,9 +53,7 @@ public class CommentService {
         var application = applicationRepository.findById(applicationId)
                 .orElseThrow(() -> new IllegalArgumentException("Candidature introuvable: " + applicationId));
 
-        UUID authorId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID authorId = TenantContext.getActorId();
         AuthorType authorType = TenantContext.getRecruiterId() != null ? AuthorType.RECRUITER : AuthorType.USER;
         Visibility visibility = parseVisibility(visibilityStr);
 

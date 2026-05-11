@@ -24,7 +24,9 @@ public class ApplicationActivity {
         CHATBOT_COMPLETED,
         AI_ANALYSIS_DONE,
         ANSWER_SUBMITTED,
-        BATCH_ANSWERS_SUBMITTED
+        BATCH_ANSWERS_SUBMITTED,
+        INTERVIEW_COMPLETED,
+        INTERVIEW_CANCELLED
     }
 
     public enum ActorType {

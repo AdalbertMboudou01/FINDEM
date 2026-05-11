@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, MapPin, Calendar, Users, Pencil, Trash2, ChevronRight, Briefcase, Link2, MessageSquare, GripVertical, X, Archive, XCircle, Tag, ExternalLink, Copy, Check } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Plus, MapPin, Calendar, Users, Pencil, Trash2, ChevronRight, Briefcase, Link2, MessageSquare, GripVertical, X, Archive, XCircle, Tag, ExternalLink, Copy, Check, MoreVertical, RotateCcw, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -33,7 +33,7 @@ function applyUrl(slug) {
 }
 
 const EMPTY = {
-  title: '', description: '', location: '', alternanceRhythm: '',
+  title: '', location: '', alternanceRhythm: '',
   statut: 'ouvert', maxCandidatures: '', autoClose: true,
   technologies: [], contextePoste: '', missionsDetaillees: '', serviceEntreprise: '',
 };
@@ -90,6 +90,82 @@ function TechTagInput({ value = [], onChange }) {
   );
 }
 
+function JobCard({ job, copied, onEdit, onDelete, onQuickStatus, onQuestions, onCandidatures }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function close(e) { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false); }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  function action(fn) { setMenuOpen(false); fn(); }
+
+  return (
+    <div className="job-card">
+      {/* ── Header ── */}
+      <div className="job-card-top">
+        <StatutBadge statut={job.statut} />
+        <div className="job-card-menu-wrap" ref={menuRef}>
+          <button className="icon-btn" onClick={() => setMenuOpen(v => !v)} title="Actions">
+            <MoreVertical size={15} />
+          </button>
+          {menuOpen && (
+            <div className="job-card-menu">
+              <button onClick={() => action(onEdit)}><Pencil size={13} /> Modifier</button>
+              <button onClick={() => action(onQuestions)}><MessageSquare size={13} /> Questionnaire</button>
+              {job.statut !== 'clôturé' && job.statut !== 'archivé' && (
+                <button onClick={() => action(() => onQuickStatus(job, 'clôturé'))}><XCircle size={13} /> Fermer l'offre</button>
+              )}
+              {job.statut !== 'archivé' && (
+                <button onClick={() => action(() => onQuickStatus(job, 'archivé'))}><Archive size={13} /> Archiver</button>
+              )}
+              {(job.statut === 'clôturé' || job.statut === 'archivé') && (
+                <button onClick={() => action(() => onQuickStatus(job, 'ouvert'))}><RotateCcw size={13} /> Rouvrir</button>
+              )}
+              <button className="danger" onClick={() => action(onDelete)}><Trash2 size={13} /> Supprimer</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <h3 className="job-card-title">{job.title}</h3>
+
+      <div className="job-card-meta">
+        {job.location         && <span><MapPin size={13} strokeWidth={2} /> {job.location}</span>}
+        {job.alternanceRhythm && <span><Calendar size={13} strokeWidth={2} /> {job.alternanceRhythm}</span>}
+        {job.maxCandidatures  && <span><Users size={13} strokeWidth={2} /> max {job.maxCandidatures}</span>}
+        <span className="job-card-date">{timeAgo(job.createdAt)}</span>
+      </div>
+
+      {job.technologies?.length > 0 && (
+        <div className="job-card-techs">
+          <Tag size={11} style={{ color: '#6b7280', flexShrink: 0 }} />
+          {job.technologies.slice(0, 4).map((t, i) => (
+            <span key={i} className="job-tech-tag">{t}</span>
+          ))}
+          {job.technologies.length > 4 && <span className="job-tech-more">+{job.technologies.length - 4}</span>}
+        </div>
+      )}
+
+      {job.description && (
+        <p className="job-card-desc">
+          {job.description.length > 110 ? job.description.slice(0, 110) + '…' : job.description}
+        </p>
+      )}
+
+      {/* ── Footer ── */}
+      <div className="job-card-footer">
+        <button className="job-card-cta" onClick={onCandidatures}>
+          <Users size={14} /> Voir les candidatures <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function OffresPage() {
   const { session } = useAuth();
   const navigate    = useNavigate();
@@ -104,13 +180,18 @@ export default function OffresPage() {
   const [saving,      setSaving]      = useState(false);
   const [formError,   setFormError]   = useState('');
   const [copied,      setCopied]      = useState(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGenerated,  setAiGenerated]  = useState(false);
 
   /* Questions drawer */
-  const [qJob,        setQJob]        = useState(null);
-  const [questions,   setQuestions]   = useState([]);
-  const [qLoading,    setQLoading]    = useState(false);
-  const [newQ,        setNewQ]        = useState(EMPTY_QUESTION);
-  const [qSaving,     setQSaving]     = useState(false);
+  const [qJob,          setQJob]          = useState(null);
+  const [questions,     setQuestions]     = useState([]);
+  const [qLoading,      setQLoading]      = useState(false);
+  const [newQ,          setNewQ]          = useState(EMPTY_QUESTION);
+  const [qSaving,       setQSaving]       = useState(false);
+  const [qTab,          setQTab]          = useState('questions');
+  const [showAddForm,   setShowAddForm]   = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => { load(); }, []);
 
@@ -124,12 +205,12 @@ export default function OffresPage() {
   const filtered = filter === 'all' ? jobs : jobs.filter(j => j.statut === filter);
 
   /* ── Offre drawer ── */
-  function openCreate() { setEditing(null); setForm(EMPTY); setFormError(''); setShowDrawer(true); }
+  function openCreate() { setEditing(null); setForm(EMPTY); setFormError(''); setAiGenerated(false); setShowDrawer(true); }
 
   function openEdit(job) {
     setEditing(job);
     setForm({
-      title: job.title ?? '', description: job.description ?? '',
+      title: job.title ?? '',
       location: job.location ?? '', alternanceRhythm: job.alternanceRhythm ?? '',
       statut: job.statut ?? 'ouvert',
       maxCandidatures: job.maxCandidatures ?? '', autoClose: job.autoClose ?? true,
@@ -148,14 +229,39 @@ export default function OffresPage() {
     } catch { /* silent */ }
   }
 
-  function closeDrawer() { setShowDrawer(false); setFormError(''); }
+  function closeDrawer() { setShowDrawer(false); setFormError(''); setAiGenerated(false); }
+
+  async function handleAiAssist() {
+    if (!form.title.trim() || aiGenerating) return;
+    setAiGenerating(true);
+    setFormError('');
+    try {
+      const result = await api.post('/api/jobs/ai-assist', {
+        title: form.title,
+        location: form.location,
+        alternanceRhythm: form.alternanceRhythm,
+        context: form.serviceEntreprise,
+      }, token);
+      setForm(f => ({
+        ...f,
+        contextePoste:      result.contextePoste      || f.contextePoste,
+        missionsDetaillees: result.missionsDetaillees  || f.missionsDetaillees,
+        technologies:       result.technologies?.length ? result.technologies : f.technologies,
+      }));
+      setAiGenerated(true);
+    } catch (err) {
+      setFormError(err.message || "Le service IA est temporairement indisponible.");
+    } finally {
+      setAiGenerating(false);
+    }
+  }
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
 
   async function handleSave(e) {
     e.preventDefault();
-    if (!form.title || !form.description || !form.location) {
-      setFormError('Titre, description et localisation sont obligatoires.'); return;
+    if (!form.title.trim() || !form.contextePoste.trim() || !form.missionsDetaillees.trim() || form.technologies.length === 0) {
+      setFormError("Titre, contexte de l'offre, missions détaillées et technologies sont obligatoires."); return;
     }
     setSaving(true); setFormError('');
     try {
@@ -167,12 +273,13 @@ export default function OffresPage() {
         setJobs(p => p.map(j => j.jobId === editing.jobId ? updated : j));
       } else {
         const created = await api.post('/api/jobs', {
-          title: form.title, description: form.description, location: form.location,
+          title: form.title,
+          location: form.location || null,
           alternanceRhythm: form.alternanceRhythm || null,
           companyId: session.companyId, ownerRecruiterId: session.recruiterId,
-          technologies: form.technologies ?? [],
-          contextePoste: form.contextePoste || null,
-          missionsDetaillees: form.missionsDetaillees || null,
+          technologies: form.technologies,
+          contextePoste: form.contextePoste,
+          missionsDetaillees: form.missionsDetaillees,
           serviceEntreprise: form.serviceEntreprise || null,
           maxCandidatures: form.maxCandidatures ? Number(form.maxCandidatures) : null,
           autoClose: form.autoClose,
@@ -207,6 +314,9 @@ export default function OffresPage() {
     setQJob(job);
     setQLoading(true);
     setNewQ(EMPTY_QUESTION);
+    setQTab('questions');
+    setShowAddForm(false);
+    setShowSuggestions(false);
     const data = await api.get(`/api/jobs/${job.jobId}/questions`, token).catch(() => []);
     setQuestions(Array.isArray(data) ? data.sort((a, b) => a.orderIndex - b.orderIndex) : []);
     setQLoading(false);
@@ -227,6 +337,7 @@ export default function OffresPage() {
       }, token);
       setQuestions(p => [...p, created]);
       setNewQ(EMPTY_QUESTION);
+      setShowAddForm(false);
     } catch { /* silent */ } finally {
       setQSaving(false);
     }
@@ -287,70 +398,16 @@ export default function OffresPage() {
       ) : (
         <div className="job-grid">
           {filtered.map(job => (
-            <div key={job.jobId} className="job-card">
-              <div className="job-card-top">
-                <StatutBadge statut={job.statut} />
-                <div className="job-card-actions">
-                  <button className="icon-btn" onClick={() => openEdit(job)} title="Modifier"><Pencil size={15} /></button>
-                  <button className="icon-btn danger" onClick={() => handleDelete(job)} title="Supprimer"><Trash2 size={15} /></button>
-                </div>
-              </div>
-
-              <h3 className="job-card-title">{job.title}</h3>
-
-              <div className="job-card-meta">
-                {job.location         && <span><MapPin size={13} strokeWidth={2} /> {job.location}</span>}
-                {job.alternanceRhythm && <span><Calendar size={13} strokeWidth={2} /> {job.alternanceRhythm}</span>}
-                {job.maxCandidatures  && <span><Users size={13} strokeWidth={2} /> max {job.maxCandidatures}</span>}
-              </div>
-
-              {job.technologies?.length > 0 && (
-                <div className="job-card-techs">
-                  <Tag size={11} style={{ color: '#6b7280', flexShrink: 0 }} />
-                  {job.technologies.slice(0, 4).map((t, i) => (
-                    <span key={i} className="job-tech-tag">{t}</span>
-                  ))}
-                  {job.technologies.length > 4 && <span className="job-tech-more">+{job.technologies.length - 4}</span>}
-                </div>
-              )}
-
-              {job.description && (
-                <p className="job-card-desc">
-                  {job.description.length > 110 ? job.description.slice(0, 110) + '…' : job.description}
-                </p>
-              )}
-
-
-              <div className="job-card-quick-actions">
-                {job.statut !== 'clôturé' && job.statut !== 'archivé' && (
-                  <button className="job-quick-btn" onClick={() => handleQuickStatus(job, 'clôturé')} title="Fermer l'offre">
-                    <XCircle size={12} /> Fermer
-                  </button>
-                )}
-                {job.statut !== 'archivé' && (
-                  <button className="job-quick-btn" onClick={() => handleQuickStatus(job, 'archivé')} title="Archiver">
-                    <Archive size={12} /> Archiver
-                  </button>
-                )}
-                {(job.statut === 'clôturé' || job.statut === 'archivé') && (
-                  <button className="job-quick-btn green" onClick={() => handleQuickStatus(job, 'ouvert')} title="Réouvrir">
-                    <Plus size={12} /> Rouvrir
-                  </button>
-                )}
-              </div>
-
-              <div className="job-card-footer">
-                <span className="job-card-date">{timeAgo(job.createdAt)}</span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn-ghost" onClick={() => openQuestions(job)} title="Configurer le questionnaire candidat">
-                    <MessageSquare size={13} /> Questionnaire
-                  </button>
-                  <button className="btn-ghost" onClick={() => navigate(`/candidatures?jobId=${job.jobId}`)}>
-                    Candidatures <ChevronRight size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <JobCard
+              key={job.jobId}
+              job={job}
+              copied={copied}
+              onEdit={() => openEdit(job)}
+              onDelete={() => handleDelete(job)}
+              onQuickStatus={handleQuickStatus}
+              onQuestions={() => openQuestions(job)}
+              onCandidatures={() => navigate(`/candidatures?jobId=${job.jobId}`)}
+            />
           ))}
         </div>
       )}
@@ -365,18 +422,56 @@ export default function OffresPage() {
               <button className="icon-btn" onClick={closeDrawer}>✕</button>
             </div>
             <form className="drawer-form" onSubmit={handleSave}>
+
+              {/* ── Bannière IA (création uniquement) ── */}
+              {!editing && (
+                <div className="ai-assist-banner">
+                  <div className="ai-assist-banner-left">
+                    <Sparkles size={15} />
+                    <span>Remplissez le titre, puis laissez l'IA compléter l'offre</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ai-assist-btn"
+                    onClick={handleAiAssist}
+                    disabled={!form.title.trim() || aiGenerating}
+                  >
+                    {aiGenerating
+                      ? <><span className="ai-spinner" /> Génération…</>
+                      : <><Sparkles size={13} /> Générer</>}
+                  </button>
+                </div>
+              )}
+
+              {aiGenerated && (
+                <div className="ai-generated-notice">
+                  ✦ Contenu généré par l'IA — vérifiez et ajustez avant de publier
+                </div>
+              )}
+
               <div className="form-field">
-                <label>Titre *</label>
-                <input value={form.title} onChange={set('title')} placeholder="Ex: Développeur React" required />
+                <label>Titre de l'offre *</label>
+                <input value={form.title} onChange={set('title')} placeholder="Ex: Développeur React Native" required />
               </div>
               <div className="form-field">
-                <label>Description *</label>
-                <textarea value={form.description} onChange={set('description')} placeholder="Décrivez le poste, les missions…" rows={4} required />
+                <label>Contexte de l'offre *</label>
+                <textarea value={form.contextePoste} onChange={set('contextePoste')} placeholder="Présentez le contexte, l'environnement de travail, la structure…" rows={3} required />
+              </div>
+              <div className="form-field">
+                <label>Missions détaillées *</label>
+                <textarea value={form.missionsDetaillees} onChange={set('missionsDetaillees')} placeholder="Listez les missions principales du poste…" rows={4} required />
+              </div>
+              <div className="form-field">
+                <label>Technologies requises *</label>
+                <TechTagInput
+                  value={form.technologies}
+                  onChange={tags => setForm(f => ({ ...f, technologies: tags }))}
+                />
               </div>
               <div className="form-row-2">
                 <div className="form-field">
-                  <label>Localisation *</label>
-                  <input value={form.location} onChange={set('location')} placeholder="Paris, Lyon…" required />
+                  <label>Localisation</label>
+                  <input value={form.location} onChange={set('location')} placeholder="Paris, Lyon…" />
                 </div>
                 <div className="form-field">
                   <label>Durée</label>
@@ -406,26 +501,9 @@ export default function OffresPage() {
                 <input type="checkbox" checked={form.autoClose} onChange={set('autoClose')} />
                 Fermer automatiquement quand le maximum est atteint
               </label>
-
-              <div className="form-field">
-                <label>Technologies requises</label>
-                <TechTagInput
-                  value={form.technologies}
-                  onChange={tags => setForm(f => ({ ...f, technologies: tags }))}
-                />
-              </div>
-
               <div className="form-field">
                 <label>Service / Équipe</label>
                 <input value={form.serviceEntreprise} onChange={set('serviceEntreprise')} placeholder="Ex: Équipe produit, R&D…" />
-              </div>
-              <div className="form-field">
-                <label>Contexte du poste</label>
-                <textarea value={form.contextePoste} onChange={set('contextePoste')} placeholder="Présentez le contexte, l'environnement de travail…" rows={3} />
-              </div>
-              <div className="form-field">
-                <label>Missions détaillées</label>
-                <textarea value={form.missionsDetaillees} onChange={set('missionsDetaillees')} placeholder="Listez les missions principales du poste…" rows={4} />
               </div>
 
               {formError && <p className="auth-error">{formError}</p>}
@@ -453,114 +531,153 @@ export default function OffresPage() {
               <button className="icon-btn" onClick={closeQuestions}>✕</button>
             </div>
 
-            {/* Lien de candidature */}
-            {qJob.slug && (
-              <div className="q-apply-link">
-                <div className="q-apply-link-label">
-                  <Link2 size={13} />
-                  Lien à envoyer aux candidats
-                </div>
-                <div className="q-apply-link-row">
-                  <span className="q-apply-link-url">{applyUrl(qJob.slug)}</span>
+            {/* Onglets */}
+            <div className="q-tabs">
+              <button className={`q-tab${qTab === 'questions' ? ' active' : ''}`} onClick={() => setQTab('questions')}>
+                <MessageSquare size={13} /> Questions {questions.length > 0 && <span className="q-tab-count">{questions.length}</span>}
+              </button>
+              <button className={`q-tab${qTab === 'lien' ? ' active' : ''}`} onClick={() => setQTab('lien')}>
+                <Link2 size={13} /> Lien candidat
+              </button>
+            </div>
+
+            {/* ── Onglet Questions ── */}
+            {qTab === 'questions' && (
+              <div className="drawer-form" style={{ flex: 1, overflowY: 'auto' }}>
+                {qLoading ? (
+                  <p style={{ color: '#9ca3af', fontSize: 13 }}>Chargement…</p>
+                ) : questions.length === 0 ? (
+                  <p className="q-empty">Aucune question configurée. Ajoutez-en une ci-dessous.</p>
+                ) : (
+                  <div className="q-list">
+                    {questions.map((q, i) => (
+                      <div key={q.id} className="q-row">
+                        <GripVertical size={14} className="q-grip" />
+                        <div className="q-body">
+                          <span className="q-index">{i + 1}.</span>
+                          <span className="q-text">{q.questionText}</span>
+                          {q.required && <span className="q-required">Req.</span>}
+                        </div>
+                        <button className="icon-btn danger" onClick={() => handleDeleteQuestion(q)} title="Supprimer">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Barre d'actions */}
+                <div className="q-actions-bar">
                   <button
-                    className={`q-apply-copy-btn${copied === qJob.jobId ? ' copied' : ''}`}
-                    onClick={() => handleCopyLink(qJob)}
-                    title="Copier le lien"
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => { setShowSuggestions(v => !v); setShowAddForm(false); }}
                   >
-                    {copied === qJob.jobId ? <Check size={13} /> : <Copy size={13} />}
-                    {copied === qJob.jobId ? 'Copié !' : 'Copier'}
+                    <Sparkles size={13} /> Suggestions
                   </button>
-                  <a
-                    href={applyUrl(qJob.slug)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="q-apply-preview-btn"
-                    title="Prévisualiser le formulaire"
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => { setShowAddForm(v => !v); setShowSuggestions(false); }}
                   >
-                    <ExternalLink size={13} /> Prévisualiser
-                  </a>
+                    <Plus size={13} /> Ajouter
+                  </button>
                 </div>
+
+                {/* Suggestions (collapsible) */}
+                {showSuggestions && (
+                  <div className="q-suggestions-panel">
+                    {SUGGESTED_QUESTIONS.map((s, i) => {
+                      const added = questions.some(q => q.questionText === s.questionText);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          className={`q-suggestion-row${added ? ' added' : ''}`}
+                          onClick={() => !added && handleAddSuggested(s)}
+                          disabled={added || qSaving}
+                        >
+                          <span className="q-suggestion-icon">{added ? <Check size={12} /> : <Plus size={12} />}</span>
+                          <span className="q-suggestion-text">{s.questionText}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Formulaire ajout (collapsible) */}
+                {showAddForm && (
+                  <form className="q-add-form" onSubmit={handleAddQuestion}>
+                    <div className="form-field">
+                      <input
+                        autoFocus
+                        value={newQ.questionText}
+                        onChange={e => setNewQ(p => ({ ...p, questionText: e.target.value }))}
+                        placeholder="Ex: Pourquoi cette alternance vous intéresse-t-elle ?"
+                        required
+                      />
+                    </div>
+                    <div className="form-row-2">
+                      <div className="form-field">
+                        <label>Type</label>
+                        <select value={newQ.answerType} onChange={e => setNewQ(p => ({ ...p, answerType: e.target.value }))}>
+                          <option value="open">Réponse libre</option>
+                          <option value="yesno">Oui / Non</option>
+                          <option value="scale">Échelle 1–5</option>
+                        </select>
+                      </div>
+                      <div className="form-field" style={{ justifyContent: 'flex-end' }}>
+                        <label className="form-checkbox" style={{ marginTop: 22 }}>
+                          <input type="checkbox" checked={newQ.required} onChange={e => setNewQ(p => ({ ...p, required: e.target.checked }))} />
+                          Obligatoire
+                        </label>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                      <button type="button" className="btn-outline" onClick={() => setShowAddForm(false)}>Annuler</button>
+                      <button type="submit" className="btn-primary" disabled={qSaving || !newQ.questionText.trim()}>
+                        {qSaving ? 'Ajout…' : 'Ajouter'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             )}
 
-            <div className="drawer-form" style={{ flex: 1, overflowY: 'auto' }}>
-              {qLoading ? (
-                <p style={{ color: '#9ca3af', fontSize: 13 }}>Chargement…</p>
-              ) : questions.length === 0 ? (
-                <p style={{ color: '#9ca3af', fontSize: 13 }}>Aucune question configurée.</p>
-              ) : (
-                <div className="q-list">
-                  {questions.map((q, i) => (
-                    <div key={q.id} className="q-row">
-                      <GripVertical size={14} className="q-grip" />
-                      <div className="q-body">
-                        <span className="q-index">{i + 1}.</span>
-                        <span className="q-text">{q.questionText}</span>
-                        {q.required && <span className="q-required">Obligatoire</span>}
-                      </div>
-                      <button className="icon-btn danger" onClick={() => handleDeleteQuestion(q)} title="Supprimer">
-                        <X size={13} />
-                      </button>
+            {/* ── Onglet Lien ── */}
+            {qTab === 'lien' && (
+              <div className="drawer-form">
+                {qJob.slug ? (
+                  <>
+                    <p className="q-lien-hint">Partagez ce lien avec vos candidats pour qu'ils postulent directement à cette offre.</p>
+                    <div className="q-lien-box">
+                      <span className="q-apply-link-url">{applyUrl(qJob.slug)}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Questions suggérées */}
-              <div className="q-suggestions">
-                <p className="q-add-label">Questions suggérées</p>
-                <div className="q-chips">
-                  {SUGGESTED_QUESTIONS.map((s, i) => {
-                    const added = questions.some(q => q.questionText === s.questionText);
-                    return (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                       <button
-                        key={i}
-                        type="button"
-                        className={`q-chip${added ? ' q-chip-added' : ''}`}
-                        onClick={() => !added && handleAddSuggested(s)}
-                        disabled={added || qSaving}
-                        title={s.questionText}
+                        className={`btn-primary${copied === qJob.jobId ? ' copied' : ''}`}
+                        style={{ flex: 1 }}
+                        onClick={() => handleCopyLink(qJob)}
                       >
-                        {added ? '✓ ' : '+ '}{s.questionText.length > 48 ? s.questionText.slice(0, 48) + '…' : s.questionText}
+                        {copied === qJob.jobId ? <Check size={14} /> : <Copy size={14} />}
+                        {copied === qJob.jobId ? 'Lien copié !' : 'Copier le lien'}
                       </button>
-                    );
-                  })}
-                </div>
+                      <a
+                        href={applyUrl(qJob.slug)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-outline"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <ExternalLink size={14} /> Prévisualiser
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <p className="q-empty">Aucun lien disponible pour cette offre.</p>
+                )}
               </div>
-
-              <form className="q-add-form" onSubmit={handleAddQuestion}>
-                <p className="q-add-label">Ajouter une question</p>
-                <div className="form-field">
-                  <input
-                    value={newQ.questionText}
-                    onChange={e => setNewQ(p => ({ ...p, questionText: e.target.value }))}
-                    placeholder="Ex: Pourquoi cette alternance vous intéresse-t-elle ?"
-                    required
-                  />
-                </div>
-                <div className="form-row-2">
-                  <div className="form-field">
-                    <label>Type</label>
-                    <select value={newQ.answerType} onChange={e => setNewQ(p => ({ ...p, answerType: e.target.value }))}>
-                      <option value="open">Réponse libre</option>
-                      <option value="yesno">Oui / Non</option>
-                      <option value="scale">Échelle 1-5</option>
-                    </select>
-                  </div>
-                  <div className="form-field" style={{ justifyContent: 'flex-end' }}>
-                    <label className="form-checkbox" style={{ marginTop: 22 }}>
-                      <input type="checkbox" checked={newQ.required} onChange={e => setNewQ(p => ({ ...p, required: e.target.checked }))} />
-                      Obligatoire
-                    </label>
-                  </div>
-                </div>
-                <div className="drawer-footer" style={{ padding: 0, marginTop: 8 }}>
-                  <button type="submit" className="btn-primary" disabled={qSaving || !newQ.questionText.trim()}>
-                    {qSaving ? 'Ajout…' : '+ Ajouter'}
-                  </button>
-                </div>
-              </form>
-            </div>
+            )}
           </aside>
         </>
       )}

@@ -15,6 +15,9 @@ public class ChatbotQuestion {
     @JoinColumn(name = "job_id")
     private Job job;
 
+    @Column(name = "question_key")
+    private String questionKey;
+
     @Column(nullable = false)
     private String questionText;
 
@@ -33,6 +36,9 @@ public class ChatbotQuestion {
 
     public Job getJob() { return job; }
     public void setJob(Job job) { this.job = job; }
+
+    public String getQuestionKey() { return questionKey; }
+    public void setQuestionKey(String questionKey) { this.questionKey = questionKey; }
 
     public String getQuestionText() { return questionText; }
     public void setQuestionText(String questionText) { this.questionText = questionText; }

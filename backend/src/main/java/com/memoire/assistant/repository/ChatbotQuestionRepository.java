@@ -9,4 +9,5 @@ import java.util.UUID;
 
 public interface ChatbotQuestionRepository extends JpaRepository<ChatbotQuestion, UUID> {
     List<ChatbotQuestion> findByJobOrderByOrderIndexAsc(Job job);
+    void deleteByJob(Job job);
 }

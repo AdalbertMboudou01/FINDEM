@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -83,15 +84,35 @@ public class InterviewController {
     public ResponseEntity<Interview> updateStatus(
             @PathVariable UUID applicationId,
             @PathVariable UUID interviewId,
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, Object> body) {
 
         Interview interview = interviewRepository.findById(interviewId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
 
-        String newStatus = body.get("status");
-        if (newStatus != null) interview.setStatus(newStatus);
+        String newStatus = (String) body.get("status");
+        if (newStatus != null) {
+            interview.setStatus(newStatus);
+        }
 
-        return ResponseEntity.ok(interviewRepository.save(interview));
+        String notes = (String) body.get("notes");
+        if (notes != null && !notes.isBlank()) {
+            interview.setNotes(notes);
+        }
+
+        Interview saved = interviewRepository.save(interview);
+
+        if ("COMPLETED".equals(newStatus)) {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("title", saved.getTitle());
+            if (saved.getNotes() != null) payload.put("notes", saved.getNotes());
+            activityService.logEvent(applicationId, EventType.INTERVIEW_COMPLETED, payload);
+        } else if ("CANCELLED".equals(newStatus)) {
+            activityService.logEvent(applicationId, EventType.INTERVIEW_CANCELLED, Map.of(
+                "title", saved.getTitle()
+            ));
+        }
+
+        return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/{interviewId}")

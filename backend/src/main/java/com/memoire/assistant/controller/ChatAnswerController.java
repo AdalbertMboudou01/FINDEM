@@ -117,6 +117,9 @@ public class ChatAnswerController {
                 savedAnswerIds.add(saved.getAnswerId());
             }
             
+            // Invalider le cache d'analyse — les nouvelles réponses le rendent obsolète
+            try { chatAnswerService.invalidateSemanticCache(applicationId); } catch (Exception ignored) {}
+
             // Logger l'activité
             try {
                 activityService.logEvent(applicationId, EventType.BATCH_ANSWERS_SUBMITTED,
@@ -124,7 +127,7 @@ public class ChatAnswerController {
                            "answerIds", savedAnswerIds.stream().map(UUID::toString).collect(java.util.stream.Collectors.toList()))
                 );
             } catch (Exception ignored) {}
-            
+
             return ResponseEntity.ok(Map.of(
                 "message", chatAnswers.size() + " réponses enregistrées avec succès",
                 "answerCount", chatAnswers.size(),

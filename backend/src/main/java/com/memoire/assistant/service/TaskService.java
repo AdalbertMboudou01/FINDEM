@@ -49,9 +49,7 @@ public class TaskService {
         applicationRepository.findById(applicationId).orElseThrow(
                 () -> new RuntimeException("Application non trouvée"));
 
-        UUID actorId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID actorId = TenantContext.getActorId();
 
         Task task = new Task();
         task.setApplicationId(applicationId);
@@ -120,9 +118,7 @@ public class TaskService {
 
     public List<TaskDTO> getMyTasks() {
         UUID companyId = TenantContext.getCompanyId();
-        UUID assigneeId = TenantContext.getRecruiterId() != null
-                ? TenantContext.getRecruiterId()
-                : TenantContext.getUserId();
+        UUID assigneeId = TenantContext.getActorId();
         return taskRepository
                 .findByAssigneeIdAndCompanyIdOrderByDueDateAsc(assigneeId, companyId)
                 .stream().map(this::toDTO).collect(Collectors.toList());

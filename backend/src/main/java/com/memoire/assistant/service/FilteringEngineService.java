@@ -60,7 +60,9 @@ public class FilteringEngineService {
 
             summary.setMotivationLevel(chatAnalysis.getMotivationLevel());
             summary.setTechnicalProfile(chatAnalysis.getTechnicalLevel());
-            summary.setExperienceLevel("JUNIOR");
+            summary.setExperienceLevel(chatAnalysis.getExperienceLevel() != null ? chatAnalysis.getExperienceLevel() : "JUNIOR");
+            summary.setAvailabilityStatus(chatAnalysis.getAvailabilityStatus());
+            summary.setLocationMatch(chatAnalysis.getLocationMatch());
             summary.setRecommendedAction(chatAnalysis.getRecommendedAction());
 
             StringBuilder summaryText = new StringBuilder();

@@ -38,6 +38,10 @@ public class JobService {
     @Autowired
     private RecruiterRepository recruiterRepository;
 
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private ChatAnswerService chatAnswerService;
+
     public List<Job> getAllJobs() {
         UUID companyId = requireCompanyId();
         return jobRepository.findByCompany_CompanyId(companyId);
@@ -86,9 +90,14 @@ public class JobService {
                 job.setSlug(generateUniqueSlug(job.getTitle(), job.getCompany().getCompanyId()));
             }
         }
-        return jobRepository.save(job);
+        Job saved = jobRepository.save(job);
+        // Si le poste est mis à jour, les analyses existantes sont obsolètes
+        if (saved.getJobId() != null) {
+            try { chatAnswerService.invalidateSemanticCacheForJob(saved.getJobId()); } catch (Exception ignored) {}
+        }
+        return saved;
     }
-    
+
     public Job createJobFromRequest(JobCreateRequest request) {
         UUID companyId = requireCompanyId();
         UUID recruiterId = requireRecruiterId();
@@ -107,8 +116,13 @@ public class JobService {
         job.setDescription(request.getDescription());
         job.setLocation(request.getLocation());
         job.setAlternanceRhythm(request.getAlternanceRhythm());
+        job.setContextePoste(request.getContextePoste());
+        job.setMissionsDetaillees(request.getMissionsDetaillees());
+        job.setTechnologies(request.getTechnologies());
+        job.setServiceEntreprise(request.getServiceEntreprise());
+        job.setMaxCandidatures(request.getMaxCandidatures());
+        job.setAutoClose(request.isAutoClose());
         job.setBlockingCriteria(request.getBlockingCriteria());
-        // job.setTechnologies(request.getTechnologies()); // Temporairement désactivé
         job.setSlug(generateUniqueSlug(request.getTitle(), companyId));
         job.setStatut("ouvert");
 
